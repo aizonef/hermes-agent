@@ -9,6 +9,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
@@ -20,10 +21,10 @@ jobs:
       - run: npm run build --workspace web
 
       - name: Find build output
+        shell: pwsh
         run: |
-          dir
-          dir /s /b web_dist
-          dir /s /b index.html
+          Write-Host "Searching build output..."
+          Get-ChildItem -Path . -Recurse -Directory -Filter web_dist
 
       - uses: actions/upload-artifact@v4
         with:
