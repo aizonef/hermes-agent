@@ -8,10 +8,6 @@ jobs:
 
     runs-on: windows-latest
 
-    defaults:
-      run:
-        shell: bash
-
     steps:
 
       - uses: actions/checkout@v4
@@ -23,11 +19,18 @@ jobs:
         with:
           node-version: 22
 
-      - run: npm ci || npm install || npm install -g --force
+      - run: npm install
 
-      - run: npm run build:hermes-web
+      - run: npm run build --workspace web
+
+      - name: Find build output
+        shell: pwsh
+        run: |
+          Write-Host "Searching build output..."
+          Get-ChildItem -Path . -Recurse -Directory -Filter web_dist
 
       - name: Stage artifact directory
+        shell: bash
         run: |
           set -e
           rm -rf staged
@@ -37,17 +40,19 @@ jobs:
           ls -la staged/
 
       - name: Compute web UI source content hash
+        shell: bash
         run: |
           set -e
           HASH=$(python scripts/compute_web_ui_hash.py . web)
           if [[ ! "$HASH" =~ ^[0-9a-f]{64}$ ]]; then
-            echo "ERROR: invalid hash output: '$HASH'" >&2
+            echo "ERROR: invalid hash output: $HASH" >&2
             exit 1
           fi
           echo "CONTENT_HASH=$HASH" >> "$GITHUB_ENV"
           echo "Computed hash: $HASH"
 
       - name: Write build stamp into artifact
+        shell: bash
         run: |
           set -e
           cat > staged/web-ui-build-stamp.json <<EOF
@@ -59,8 +64,7 @@ jobs:
           echo "Wrote stamp:"
           cat staged/web-ui-build-stamp.json
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: web-dist
           path: staged
