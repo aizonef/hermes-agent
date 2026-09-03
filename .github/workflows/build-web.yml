@@ -43,7 +43,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          HASH=$(python scripts/compute_web_ui_hash.py . web)
+          HASH=$(py scripts/compute_web_ui_hash.py . web 2>/dev/null || python scripts/compute_web_ui_hash.py . web 2>/dev/null || python3 scripts/compute_web_ui_hash.py . web)
           if [[ ! "$HASH" =~ ^[0-9a-f]{64}$ ]]; then
             echo "ERROR: invalid hash output: $HASH" >&2
             exit 1
