@@ -8,6 +8,10 @@ jobs:
 
     runs-on: windows-latest
 
+    defaults:
+      run:
+        shell: bash
+
     steps:
 
       - uses: actions/checkout@v4
@@ -24,36 +28,36 @@ jobs:
       - run: npm run build:hermes-web
 
       - name: Stage artifact directory
-        shell: pwsh
         run: |
-          if (Test-Path staged) { Remove-Item staged -Recurse -Force }
-          New-Item -ItemType Directory -Path staged | Out-Null
-          Copy-Item -Path 'hermes_cli/web_dist/*' -Destination staged -Recurse -Force
-          Write-Host "Staged artifact contents:"
-          Get-ChildItem -Recurse staged | Select-Object -First 20
+          set -e
+          rm -rf staged
+          mkdir staged
+          cp -r hermes_cli/web_dist/. staged/
+          echo "Staged contents:"
+          ls -la staged/
 
       - name: Compute web UI source content hash
-        shell: pwsh
         run: |
-          python scripts/compute_web_ui_hash.py . web | Tee-Object -Variable hashOut | Write-Host
-          $hash = $hashOut.Trim()
-          if ($hash -notmatch '^[0-9a-f]{64}$') {
-            Write-Error "Invalid hash output: '$hash'"
+          set -e
+          HASH=$(python scripts/compute_web_ui_hash.py . web)
+          if [[ ! "$HASH" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "ERROR: invalid hash output: '$HASH'" >&2
             exit 1
-          }
-          "CONTENT_HASH=$hash" | Out-File -Encoding utf8 -Append $env:GITHUB_ENV
-          Write-Host "Set CONTENT_HASH=$hash"
+          fi
+          echo "CONTENT_HASH=$HASH" >> "$GITHUB_ENV"
+          echo "Computed hash: $HASH"
 
       - name: Write build stamp into artifact
-        shell: pwsh
         run: |
-          $stamp = @{
-            contentHash = $env:CONTENT_HASH
-            builtAt     = (Get-Date).ToUniversalTime().ToString('o')
-          } | ConvertTo-Json -Depth 5
-          $stampPath = 'staged/web-ui-build-stamp.json'
-          $stamp | Out-File -Encoding utf8 $stampPath
-          Write-Host "Wrote stamp to $stampPath"
+          set -e
+          cat > staged/web-ui-build-stamp.json <<EOF
+          {
+            "contentHash": "$CONTENT_HASH",
+            "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          echo "Wrote stamp:"
+          cat staged/web-ui-build-stamp.json
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
