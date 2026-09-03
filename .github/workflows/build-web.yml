@@ -43,7 +43,27 @@ jobs:
         shell: bash
         run: |
           set -e
-          HASH=$(py scripts/compute_web_ui_hash.py . web 2>/dev/null || python scripts/compute_web_ui_hash.py . web 2>/dev/null || python3 scripts/compute_web_ui_hash.py . web)
+          HASH_LOG=$(mktemp)
+          HASH=""
+          for cmd in "py" "python" "python3"; do
+            echo "Trying: $cmd scripts/compute_web_ui_hash.py . web"
+            HASH=$($cmd scripts/compute_web_ui_hash.py . web 2>>"$HASH_LOG")
+            echo "Output: $HASH"
+            if [[ "$HASH" =~ ^[0-9a-f]{64}$ ]]; then
+              echo "OK with $cmd"
+              break
+            fi
+            HASH=""
+          done
+          if [ -z "$HASH" ]; then
+            echo "All python attempts failed. Diagnostic log:"
+            cat "$HASH_LOG"
+            ls -la scripts/ 2>&1 || true
+            which py python python3 2>&1 || true
+            exit 1
+          fi
+          echo "CONTENT_HASH=$HASH" >> "$GITHUB_ENV"
+          echo "Computed hash: $HASH"
           if [[ ! "$HASH" =~ ^[0-9a-f]{64}$ ]]; then
             echo "ERROR: invalid hash output: $HASH" >&2
             exit 1
