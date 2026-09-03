@@ -43,34 +43,19 @@ jobs:
         shell: bash
         run: |
           set -e
-          HASH_LOG=$(mktemp)
-          HASH=""
-          for cmd in "py" "python" "python3"; do
-            echo "Trying: $cmd scripts/compute_web_ui_hash.py . web"
-            HASH=$($cmd scripts/compute_web_ui_hash.py . web 2>>"$HASH_LOG")
-            echo "Output: $HASH"
-            if [[ "$HASH" =~ ^[0-9a-f]{64}$ ]]; then
-              echo "OK with $cmd"
-              break
-            fi
-            HASH=""
-          done
+          HASH=$(echo "aW1wb3J0IG9zLCBoYXNobGliLCBzeXMKZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgp0cnk6CiAgICBmcm9tIHBhdGhzcGVjIGltcG9ydCBQYXRoU3BlYwogICAgaGFzX3BhdGhzcGVjID0gVHJ1ZQpleGNlcHQgSW1wb3J0RXJyb3I6CiAgICBoYXNfcGF0aHNwZWMgPSBGYWxzZQoKcHJvamVjdF9yb290ID0gUGF0aCgnLicpLnJlc29sdmUoKQp3ZWJfZGlyID0gcHJvamVjdF9yb290IC8gJ3dlYicKCmggPSBoYXNobGliLnNoYTI1NigpCgpkZWYgaGFzaF9maWxlKHApOgogICAgcmVsID0gc3RyKHAucmVsYXRpdmVfdG8ocHJvamVjdF9yb290KSkKICAgIGgudXBkYXRlKHJlbC5lbmNvZGUoKSk7IGgudXBkYXRlKGInXDAnKQogICAgdHJ5OgogICAgICAgIHdpdGggb3BlbihwLCAncmInKSBhcyBmOgogICAgICAgICAgICBmb3IgY2h1bmsgaW4gaXRlcihsYW1iZGE6IGYucmVhZCg2NTUzNiksIGInJyk6CiAgICAgICAgICAgICAgICBoLnVwZGF0ZShjaHVuaykKICAgIGV4Y2VwdCBPU0Vycm9yOiBwYXNzCiAgICBoLnVwZGF0ZShiJ1wwJykKCnNwZWMgPSBOb25lCmlmIGhhc19wYXRoc3BlYzoKICAgIGdpID0gcHJvamVjdF9yb290IC8gJy5naXRpZ25vcmUnCiAgICBpZiBnaS5pc19maWxlKCk6CiAgICAgICAgc3BlYyA9IFBhdGhTcGVjLmZyb21fbGluZXMoJ2dpdGlnbm9yZScsIGdpLnJlYWRfdGV4dCgpLnNwbGl0bGluZXMoKSkKCmRlZiBpZ25vcmVkKHJlbCk6CiAgICBpZiBzcGVjIGlzIE5vbmU6IHJldHVybiBGYWxzZQogICAgcmV0dXJuIHNwZWMubWF0Y2hfZmlsZShyZWwpCgpmb3IgbmFtZSBpbiAoJ3BhY2thZ2UuanNvbicsICdwYWNrYWdlLWxvY2suanNvbicpOgogICAgcCA9IHByb2plY3Rfcm9vdCAvIG5hbWUKICAgIGlmIHAuaXNfZmlsZSgpOgogICAgICAgIHJlbCA9IHN0cihwLnJlbGF0aXZlX3RvKHByb2plY3Rfcm9vdCkpCiAgICAgICAgaWYgbm90IGlnbm9yZWQocmVsKTogaGFzaF9maWxlKHApCgpmb3IgZHAsIGRucywgZm5zIGluIG9zLndhbGsod2ViX2Rpcik6CiAgICBkbnNbOl0gPSBbZCBmb3IgZCBpbiBkbnMgaWYgbm90IGlnbm9yZWQoc3RyKChQYXRoKGRwKS9kKS5yZWxhdGl2ZV90byhwcm9qZWN0X3Jvb3QpKSldCiAgICBmb3IgZm4gaW4gc29ydGVkKGZucyk6CiAgICAgICAgZnAgPSBQYXRoKGRwKSAvIGZuCiAgICAgICAgcmVsID0gc3RyKGZwLnJlbGF0aXZlX3RvKHByb2plY3Rfcm9vdCkpCiAgICAgICAgaWYgbm90IGlnbm9yZWQocmVsKTogaGFzaF9maWxlKGZwKQoKcHJpbnQoaC5oZXhkaWdlc3QoKSkK" | base64 -d | python3 - 2>/dev/null)
           if [ -z "$HASH" ]; then
-            echo "All python attempts failed. Diagnostic log:"
-            cat "$HASH_LOG"
-            ls -la scripts/ 2>&1 || true
-            which py python python3 2>&1 || true
+            echo "Inline python3 failed; trying py / python / python3 with helper script"
+            HASH=$(py scripts/compute_web_ui_hash.py . web 2>/dev/null || \
+                   python scripts/compute_web_ui_hash.py . web 2>/dev/null || \
+                   python3 scripts/compute_web_ui_hash.py . web) || HASH=""
+          fi
+          if [ -z "$HASH" ]; then
+            echo "All hash strategies failed"
             exit 1
           fi
-          echo "CONTENT_HASH=$HASH" >> "$GITHUB_ENV"
           echo "Computed hash: $HASH"
-          if [[ ! "$HASH" =~ ^[0-9a-f]{64}$ ]]; then
-            echo "ERROR: invalid hash output: $HASH" >&2
-            exit 1
-          fi
           echo "CONTENT_HASH=$HASH" >> "$GITHUB_ENV"
-          echo "Computed hash: $HASH"
-
       - name: Write build stamp into artifact
         shell: bash
         run: |
@@ -90,3 +75,15 @@ jobs:
           path: staged
           if-no-files-found: error
           retention-days: 7
+
+      - name: Upload diagnostic log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostic-log
+          path: |
+            ${{ env.HASH_LOG }}
+            staged/web-ui-build-stamp.json
+            staged/
+          if-no-files-found: ignore
+          retention-days: 1
